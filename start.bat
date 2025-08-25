@@ -1,0 +1,9 @@
+@echo off
+echo Starting CSP Auditor Backend...
+echo.
+echo Installing dependencies...
+npm install
+echo.
+echo Starting server...
+npm start
+pause

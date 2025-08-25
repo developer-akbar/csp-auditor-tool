@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSP Auditor - Content Security Policy Analysis Tool</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔒 CSP Auditor</h1>
+            <p>Content Security Policy Analysis & CDN Configuration Tool</p>
+        </div>
+
+        <div class="main-content">
+            <div class="input-section">
+                <div class="input-group">
+                    <label>
+                        <input type="radio" name="input-type" value="sitemap" id="sitemap-radio" checked>
+                        🌐 Sitemap URL
+                    </label>
+                    <input type="url" id="sitemap-url" placeholder="https://dev.wkkellogg.com/sitemap.xml" class="input-field">
+                    <small>Enter your website's sitemap XML URL to automatically extract all page URLs</small>
+                </div>
+
+                <div class="input-group">
+                    <label>
+                        <input type="radio" name="input-type" value="manual" id="manual-radio">
+                        📝 Manual URLs
+                    </label>
+                    <textarea id="manual-urls" placeholder="https://dev.wkkellogg.com/products/red-berries-cereal" class="input-field" style="display: none;"></textarea>
+                    <small>Enter URLs manually, one per line or comma-separated</small>
+                </div>
+
+                <button id="process-btn" class="process-btn">
+                    <span class="spinner hidden"></span>
+                    Extract CSP Directives
+                </button>
+            </div>
+
+            <div id="progress-section" class="progress-section">
+                <div class="status-text" id="status-text">Processing...</div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progress-fill"></div>
+                </div>
+                <div class="progress-details" id="progress-details">Initializing...</div>
+                <div class="completion-time" id="completion-time" style="display: none;"></div>
+            </div>
+
+            <div id="error-message" class="error-message"></div>
+
+            <div id="results-section" class="results-section">
+                <div class="results-header">
+                    <h3>📊 Analysis Results</h3>
+                    <div class="download-buttons">
+                        <a id="csv-download" class="download-btn disabled" href="#" download disabled>📥 Download CSV</a>
+                        <a id="json-download" class="download-btn secondary disabled" href="#" download disabled>📥 Download JSON</a>
+                    </div>
+                </div>
+
+                <div class="summary-report">
+                    <h4>📋 Summary Report</h4>
+                    <div class="directive-stats" id="directive-stats"></div>
+                </div>
+
+                <div class="consolidated-csp">
+                    <h4>🔗 Consolidated CSP Rule</h4>
+                    <p>Complete CSP rule combining all directives found across all pages:</p>
+                    <div class="rule-container">
+                        <div class="rule-text" id="consolidated-rule"></div>
+                        <div class="rule-actions">
+                            <button id="copy-consolidated-btn" class="copy-btn">📋 Copy Consolidated Rule</button>
+                            <button id="download-consolidated-btn" class="copy-btn secondary">📥 Download JSON</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="cdn-comparison">
+                    <h4>🔍 CDN Rule Comparison</h4>
+                    <div class="input-group">
+                        <label for="existing-cdn-rule">Existing CDN CSP Rule:</label>
+                        <textarea id="existing-cdn-rule" placeholder="script-src 'self' 'unsafe-inline' https://cdn.example.com;"></textarea>
+                        <small>Paste your current CDN CSP configuration to compare with extracted directives</small>
+                    </div>
+                    <button id="compare-btn" class="process-btn" style="width: auto; margin: 0;">Compare & Generate Updated Rule</button>
+                    
+                    <div id="comparison-results" class="comparison-results hidden">
+                        <div id="missing-directives" class="missing-directives">
+                            <h5>➕ Directives to Add</h5>
+                            <ul class="missing-list" id="missing-list"></ul>
+                        </div>
+                        
+                        <div id="removed-directives" class="removed-directives">
+                            <h5>➖ Directives Removed (if any)</h5>
+                            <ul class="removed-list" id="removed-list"></ul>
+                        </div>
+                        
+                        <div id="updated-rule" class="updated-rule">
+                            <h5>✅ Updated CDN Rule</h5>
+                            <div class="rule-text" id="rule-text"></div>
+                            <button id="copy-rule-btn" class="copy-btn">📋 Copy Updated Rule</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
