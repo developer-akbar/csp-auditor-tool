@@ -37,6 +37,9 @@
                     <span class="spinner hidden"></span>
                     Extract CSP Directives
                 </button>
+                <button id="runtime-audit-btn" class="process-btn secondary" style="margin-left: 10px;">
+                    🔎 Run Runtime Audit (Headless)
+                </button>
             </div>
 
             <div id="progress-section" class="progress-section">
@@ -72,6 +75,20 @@
                         <div class="rule-actions">
                             <button id="copy-consolidated-btn" class="copy-btn">📋 Copy Consolidated Rule</button>
                             <button id="download-consolidated-btn" class="copy-btn secondary">📥 Download JSON</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="consolidated-csp" id="runtime-summary" style="margin-top: 24px;">
+                    <h4>🧪 Runtime CSP Audit</h4>
+                    <p>Domains detected per directive at runtime (potential additions for CSP):</p>
+                    <div class="directive-stats" id="runtime-directive-stats"></div>
+                    <div class="rule-container" style="margin-top: 10px;">
+                        <div class="rule-text" id="runtime-updated-rule"></div>
+                        <div class="rule-actions">
+                            <button id="copy-runtime-rule-btn" class="copy-btn">📋 Copy Updated Rule</button>
+                            <a id="download-runtime-json" class="download-btn secondary disabled" href="#" download disabled>📥 Download JSON</a>
+                            <a id="download-runtime-errors" class="download-btn secondary disabled" href="#" download disabled>📥 Download Errors</a>
                         </div>
                     </div>
                 </div>

@@ -17,7 +17,8 @@ class CSPAuditor {
         document.getElementById('copy-consolidated-btn').addEventListener('click', () => this.copyConsolidatedRule());
         document.getElementById('download-consolidated-btn').addEventListener('click', () => this.downloadConsolidatedRule());
         document.getElementById('analyze-blocked-btn').addEventListener('click', () => this.analyzeManualBlockedResources());
-        
+        const runtimeBtn = document.getElementById('runtime-audit-btn');
+        if (runtimeBtn) runtimeBtn.addEventListener('click', () => this.runRuntimeAudit());
         // Radio button event listeners
         document.getElementById('sitemap-radio').addEventListener('change', () => this.switchInputType());
         document.getElementById('manual-radio').addEventListener('change', () => this.switchInputType());
@@ -759,6 +760,97 @@ class CSPAuditor {
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+    }
+
+    async runRuntimeAudit() {
+        try {
+            // Build URLs same as main flow
+            const sitemapUrl = document.getElementById('sitemap-url').value.trim();
+            const manualUrls = document.getElementById('manual-urls').value.trim();
+
+            let urls = [];
+            if (sitemapUrl) {
+                const sm = await fetch(`${this.apiBase}/fetch-sitemap`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sitemapUrl })
+                });
+                const data = await sm.json();
+                if (data.success) urls = data.urls;
+            } else if (manualUrls) {
+                urls = this.parseManualUrls(manualUrls);
+            }
+            if (!urls || urls.length === 0) {
+                this.showError('No valid URLs to audit.');
+                return;
+            }
+
+            this.showProgress();
+            const resp = await fetch(`${this.apiBase}/extract-csp`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ urls })
+            });
+            const result = await resp.json();
+            this.hideProgress();
+            if (!result.success) {
+                this.showError(result.message || 'Runtime audit failed');
+                return;
+            }
+
+            // Log summary to browser console for auditor clarity
+            console.log('===== Runtime CSP Audit =====');
+            console.log('URLs processed:', result.urlsProcessed);
+            Object.entries(result.finalResult || {}).forEach(([dir, domains]) => {
+                if (domains && domains.length) {
+                    console.log(dir + ':');
+                    domains.forEach(d => console.log('  - ' + d));
+                }
+            });
+            console.log('Errors captured:', (result.cspErrors || []).length);
+
+            // Render directive domains nicely
+            const container = document.getElementById('runtime-directive-stats');
+            if (container) {
+                container.innerHTML = '';
+                Object.entries(result.finalResult || {}).forEach(([directive, domains]) => {
+                    if (!domains || domains.length === 0) return;
+                    const item = document.createElement('div');
+                    item.className = 'directive-item';
+                    const valuesHtml = domains.map(value => `<span class="directive-value">${value}</span>`).join('');
+                    item.innerHTML = `
+                        <div class="directive-name">${directive}</div>
+                        <div class="directive-count">${domains.length} domains</div>
+                        <div class="directive-values"><small>${valuesHtml}</small></div>
+                    `;
+                    container.appendChild(item);
+                });
+            }
+
+            // Updated CSP rule and copy
+            const runtimeRule = (result.updatedCSP || '').trim();
+            const ruleTextEl = document.getElementById('runtime-updated-rule');
+            if (ruleTextEl) ruleTextEl.textContent = runtimeRule;
+            const copyBtn = document.getElementById('copy-runtime-rule-btn');
+            if (copyBtn) copyBtn.onclick = async () => {
+                try {
+                    await navigator.clipboard.writeText(runtimeRule);
+                    copyBtn.textContent = '✅ Copied!';
+                    copyBtn.classList.add('copied');
+                    setTimeout(() => { copyBtn.textContent = '📋 Copy Updated Rule'; copyBtn.classList.remove('copied'); }, 2000);
+                } catch (e) { this.showError('Failed to copy to clipboard.'); }
+            };
+
+            // Downloads
+            const jsonBlob = new Blob([JSON.stringify(result.finalResult || {}, null, 2)], { type: 'application/json' });
+            const jsonUrl = URL.createObjectURL(jsonBlob);
+            const dlJson = document.getElementById('download-runtime-json');
+            if (dlJson) { dlJson.href = jsonUrl; dlJson.download = `runtime-csp-domains.json`; dlJson.classList.remove('disabled'); dlJson.disabled = false; }
+
+            const errorsBlob = new Blob([JSON.stringify(result.cspErrors || [], null, 2)], { type: 'application/json' });
+            const errorsUrl = URL.createObjectURL(errorsBlob);
+            const dlErr = document.getElementById('download-runtime-errors');
+            if (dlErr) { dlErr.href = errorsUrl; dlErr.download = `csp_errors.json`; dlErr.classList.remove('disabled'); dlErr.disabled = false; }
+        } catch (e) {
+            this.hideProgress();
+            this.showError('Runtime audit failed: ' + e.message);
+        }
     }
 
     showProgress() {

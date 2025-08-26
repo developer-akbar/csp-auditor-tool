@@ -2,6 +2,9 @@ const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
 const cheerio = require('cheerio');
+const chromium = require('@sparticuz/chromium');
+const puppeteer = require('puppeteer-core');
+const xml2js = require('xml2js');
 
 const app = express();
 
@@ -341,6 +344,186 @@ app.post('/api/analyze-urls', async (req, res) => {
 	}
 });
 
+// API endpoint to fetch sitemap and extract CSP
+app.post('/api/fetch-sitemap', async (req, res) => {
+	try {
+		const { sitemapUrl } = req.body;
+		if (!sitemapUrl) {
+			return res.status(400).json({ success: false, message: 'sitemapUrl is required' });
+		}
+		const response = await axios.get(sitemapUrl, { timeout: 15000 });
+		const xml = response.data;
+		xml2js.parseString(xml, (err, result) => {
+			if (err || !result || !result.urlset || !result.urlset.url) {
+				return res.json({ success: false, message: 'Invalid sitemap format.' });
+			}
+			const urls = result.urlset.url.map(entry => entry.loc[0]).filter(Boolean);
+			return res.json({ success: true, urls });
+		});
+	} catch (e) {
+		return res.json({ success: false, message: 'Failed to fetch sitemap.' });
+	}
+});
+
+// API endpoint to extract CSP via headless runtime using puppeteer-core + chromium (Vercel-friendly)
+app.post('/api/extract-csp', async (req, res) => {
+	const { urls: inputUrls, sitemapUrl } = req.body || {};
+	try {
+		let urls = Array.isArray(inputUrls) ? inputUrls : [];
+		if ((!urls || urls.length === 0) && sitemapUrl) {
+			try {
+				const smRes = await axios.get(sitemapUrl, { timeout: 15000 });
+				await new Promise((resolve, reject) => {
+					xml2js.parseString(smRes.data, (err, result) => {
+						if (err || !result || !result.urlset || !result.urlset.url) return reject(new Error('Invalid sitemap'));
+						urls = result.urlset.url.map(entry => entry.loc[0]).filter(Boolean);
+						resolve();
+					});
+				});
+			} catch (_) {}
+		}
+
+		// Guard for Vercel time limits
+		const IS_VERCEL = !!process.env.VERCEL;
+		const MAX_URLS = Number(process.env.RUNTIME_MAX_URLS) || (IS_VERCEL ? 5 : 20);
+		urls = (urls || []).slice(0, MAX_URLS);
+		if (!urls || urls.length === 0) {
+			return res.status(400).json({ success: false, message: 'No URLs to process' });
+		}
+
+		const launchOptions = {
+			args: chromium.args,
+			defaultViewport: chromium.defaultViewport,
+			executablePath: await chromium.executablePath(),
+			headless: chromium.headless,
+			ignoreHTTPSErrors: true
+		};
+		const browser = await puppeteer.launch(launchOptions);
+
+		const categorizedDomains = {
+			'script-src': new Set(),
+			'style-src': new Set(),
+			'img-src': new Set(),
+			'font-src': new Set(),
+			'connect-src': new Set(),
+			'media-src': new Set(),
+			'frame-src': new Set(),
+			'object-src': new Set()
+		};
+		const cspErrors = [];
+		const perUrlHeaders = [];
+
+		for (const url of urls) {
+			const page = await browser.newPage();
+			await page.setCacheEnabled(false);
+
+			// Capture CSP-related console errors
+			page.on('console', msg => {
+				try {
+					const text = msg.text();
+					if (msg.type() === 'error' && text && text.toLowerCase().includes('content security policy')) {
+						cspErrors.push({ url, error: text });
+					}
+				} catch (_) {}
+			});
+
+			// Navigate and capture headers
+			let navResponse = null;
+			try {
+				navResponse = await page.goto(url, { waitUntil: 'networkidle2', timeout: 15000 });
+			} catch (_) {}
+			const headers = navResponse ? navResponse.headers() : {};
+			const cspHeader = headers['content-security-policy'] || headers['content-security-policy-report-only'] || '';
+			perUrlHeaders.push({ url, cspHeader });
+
+			// Small settle delay
+			await page.waitForTimeout(300);
+
+			// Collect resource domains by initiatorType
+			const result = await page.evaluate(() => {
+				const categorized = {
+					'script-src': new Set(),
+					'style-src': new Set(),
+					'img-src': new Set(),
+					'font-src': new Set(),
+					'connect-src': new Set(),
+					'media-src': new Set(),
+					'frame-src': new Set(),
+					'object-src': new Set()
+				};
+				try {
+					performance.getEntriesByType('resource').forEach(entry => {
+						try {
+							const u = new URL(entry.name);
+							const origin = u.origin;
+							if (entry.initiatorType === 'script') {
+								categorized['script-src'].add(origin);
+							} else if (entry.initiatorType === 'link') {
+								if (u.pathname.endsWith('.css')) categorized['style-src'].add(origin);
+								if (u.pathname.endsWith('.woff') || u.pathname.endsWith('.woff2') || u.pathname.endsWith('.ttf')) categorized['font-src'].add(origin);
+							} else if (entry.initiatorType === 'img') {
+								categorized['img-src'].add(origin);
+							} else if (entry.initiatorType === 'xmlhttprequest' || entry.initiatorType === 'fetch') {
+								categorized['connect-src'].add(origin);
+							} else if (entry.initiatorType === 'media') {
+								categorized['media-src'].add(origin);
+							} else if (entry.initiatorType === 'iframe') {
+								categorized['frame-src'].add(origin);
+							} else if (entry.initiatorType === 'object') {
+								categorized['object-src'].add(origin);
+							}
+						} catch (e) {}
+					});
+				} catch (e) {}
+				const obj = {};
+				for (const k in categorized) obj[k] = Array.from(categorized[k]);
+				return obj;
+			});
+
+			for (const [directive, domains] of Object.entries(result)) {
+				if (!categorizedDomains[directive]) categorizedDomains[directive] = new Set();
+				domains.forEach(d => categorizedDomains[directive].add(d));
+			}
+
+			await page.close();
+		}
+
+		await browser.close();
+
+		// Build final result
+		const finalResult = {};
+		for (const [directive, domains] of Object.entries(categorizedDomains)) {
+			finalResult[directive] = Array.from(domains).sort();
+		}
+
+		// Merge with existing CSP headers to compute updatedCSP
+		const combinedHeader = perUrlHeaders.map(h => h.cspHeader).filter(Boolean).join(' ');
+		const updatedCSP = buildUpdatedCSPFromDomains(combinedHeader, finalResult);
+
+		// Server console summary
+		console.log('===== CSP Runtime Summary =====');
+		console.log(`URLs processed: ${urls.length}`);
+		Object.entries(finalResult).forEach(([dir, list]) => {
+			if (list.length > 0) {
+				console.log(`${dir}:`);
+				list.forEach(d => console.log(`  - ${d}`));
+			}
+		});
+		console.log('Errors captured:', cspErrors.length);
+
+		return res.json({
+			success: true,
+			urlsProcessed: urls.length,
+			finalResult,
+			cspErrors,
+			perUrlHeaders,
+			updatedCSP
+		});
+	} catch (e) {
+		return res.status(500).json({ success: false, message: 'Runtime CSP extraction failed', error: e.message });
+	}
+});
+
 // Helper function to extract URLs from sitemap XML
 function extractUrlsFromSitemap(xmlText) {
 	const urlRegex = /<loc>(.*?)<\/loc>/g;
@@ -612,6 +795,32 @@ function generateUpdatedCSP(currentCSP, missingDirectives, externalResources) {
 	});
 	
 	return updatedCSP;
+}
+
+function parseCSPToMap(cspString) {
+	const map = new Map();
+	if (!cspString) return map;
+	const parts = cspString.split(';').map(s => s.trim()).filter(Boolean);
+	for (const part of parts) {
+		const [name, ...vals] = part.split(/\s+/);
+		if (!name || vals.length === 0) continue;
+		if (!map.has(name)) map.set(name, new Set());
+		vals.forEach(v => map.get(name).add(v));
+	}
+	return map;
+}
+
+function buildUpdatedCSPFromDomains(existingCSP, domainsByDirective) {
+	const map = parseCSPToMap(existingCSP);
+	// Ensure default-src 'self'
+	if (!map.has('default-src')) map.set('default-src', new Set(["'self'"]));
+	const ensureScheme = (origin) => origin.startsWith('http') ? origin : `https://${origin.replace(/^\/\//,'')}`;
+	for (const [directive, domains] of Object.entries(domainsByDirective)) {
+		if (!map.has(directive)) map.set(directive, new Set(["'self'"]));
+		domains.forEach(origin => map.get(directive).add(ensureScheme(origin)));
+	}
+	const ordered = Array.from(map.entries()).sort(([a],[b]) => a.localeCompare(b));
+	return ordered.map(([k, set]) => `${k} ${Array.from(set).join(' ')};`).join(' ');
 }
 
 // Enhanced CSP detection with multiple strategies and page load delay
