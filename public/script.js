@@ -5,8 +5,8 @@ class CSPAuditor {
         this.currentIndex = 0;
         this.totalUrls = 0;
         this.startTime = 0;
-        this.apiBase = 'http://localhost:3000/api';
-        
+        		this.apiBase = '/api';
+		
         this.initializeEventListeners();
     }
 
