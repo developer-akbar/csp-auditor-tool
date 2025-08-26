@@ -76,6 +76,36 @@
                     </div>
                 </div>
 
+                <div class="csp-analysis">
+                    <h4>🔍 CSP Analysis & Recommendations</h4>
+                    <div class="analysis-section">
+                        <div class="blocked-resources">
+                            <h5>🚫 Blocked Resources Detected</h5>
+                            <div class="blocked-list" id="blocked-list"></div>
+                            <small>These resources are likely being blocked by your current CSP configuration</small>
+                        </div>
+                        
+                        <div class="missing-directives-analysis">
+                            <h5>➕ Missing CSP Directives</h5>
+                            <div class="missing-directives-list" id="missing-directives-analysis-list"></div>
+                        </div>
+                        
+                        <div class="recommendations">
+                            <h5>💡 Recommendations</h5>
+                            <div class="recommendations-list" id="recommendations-list"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="manual-blocked-resources">
+                        <h5>🔧 Manually Add Blocked Resources</h5>
+                        <p>If you see CSP violations in your browser console, add them here to get recommendations:</p>
+                        <div class="input-group">
+                            <textarea id="manual-blocked-resources" placeholder="Paste blocked resource URLs here, one per line or comma-separated&#10;Example: https://www.wkkellogg.com/tag_path/profile/visit/js/1_0"></textarea>
+                            <button id="analyze-blocked-btn" class="process-btn" style="width: auto; margin: 10px 0;">Analyze Blocked Resources</button>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="cdn-comparison">
                     <h4>🔍 CDN Rule Comparison</h4>
                     <div class="input-group">

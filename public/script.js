@@ -16,6 +16,7 @@ class CSPAuditor {
         document.getElementById('copy-rule-btn').addEventListener('click', () => this.copyToClipboard());
         document.getElementById('copy-consolidated-btn').addEventListener('click', () => this.copyConsolidatedRule());
         document.getElementById('download-consolidated-btn').addEventListener('click', () => this.downloadConsolidatedRule());
+        document.getElementById('analyze-blocked-btn').addEventListener('click', () => this.analyzeManualBlockedResources());
         
         // Radio button event listeners
         document.getElementById('sitemap-radio').addEventListener('change', () => this.switchInputType());
@@ -215,6 +216,7 @@ class CSPAuditor {
         this.displayDirectiveStats(directiveStats);
         this.generateConsolidatedCSP();
         this.generateDownloadFiles();
+        this.displayCSPAnalysis(); // Add CSP analysis display
         this.showResults();
         
         // Enable download buttons
@@ -292,6 +294,207 @@ class CSPAuditor {
             `;
             container.appendChild(item);
         });
+    }
+
+    displayCSPAnalysis() {
+        // Display blocked resources
+        const blockedList = document.getElementById('blocked-list');
+        blockedList.innerHTML = '';
+        
+        let hasBlockedResources = false;
+        this.results.forEach(result => {
+            if (result.analysis && result.analysis.blockedResources) {
+                result.analysis.blockedResources.forEach(resource => {
+                    hasBlockedResources = true;
+                    const li = document.createElement('li');
+                    li.innerHTML = `
+                        <div class="blocked-resource-item">
+                            <span class="blocked-resource-type">${resource.type}</span>
+                            <div class="blocked-resource-url">${resource.url}</div>
+                            <div class="blocked-resource-recommendation">${resource.recommendation}</div>
+                        </div>
+                    `;
+                    blockedList.appendChild(li);
+                });
+            }
+        });
+        
+        if (!hasBlockedResources) {
+            blockedList.innerHTML = '<li>No blocked resources detected</li>';
+        }
+        
+        // Display missing directives analysis
+        const missingDirectivesList = document.getElementById('missing-directives-analysis-list');
+        missingDirectivesList.innerHTML = '';
+        
+        let hasMissingDirectives = false;
+        this.results.forEach(result => {
+            if (result.analysis && result.analysis.missingDirectives) {
+                result.analysis.missingDirectives.forEach(missing => {
+                    hasMissingDirectives = true;
+                    const li = document.createElement('li');
+                    const examples = missing.examples && missing.examples.length > 0 
+                        ? `<div class="missing-directive-examples">Examples: ${missing.examples.join(', ')}</div>`
+                        : '';
+                    li.innerHTML = `
+                        <div class="missing-directive-item">
+                            <div class="missing-directive-name">${missing.directive}</div>
+                            <div class="missing-directive-reason">${missing.reason}</div>
+                            ${examples}
+                        </div>
+                    `;
+                    missingDirectivesList.appendChild(li);
+                });
+            }
+        });
+        
+        if (!hasMissingDirectives) {
+            missingDirectivesList.innerHTML = '<li>No missing directives detected</li>';
+        }
+        
+        // Display recommendations
+        const recommendationsList = document.getElementById('recommendations-list');
+        recommendationsList.innerHTML = '';
+        
+        let hasRecommendations = false;
+        this.results.forEach(result => {
+            if (result.analysis && result.analysis.recommendations) {
+                result.analysis.recommendations.forEach(recommendation => {
+                    hasRecommendations = true;
+                    const li = document.createElement('li');
+                    li.className = 'recommendation-item';
+                    li.textContent = recommendation;
+                    recommendationsList.appendChild(li);
+                });
+            }
+        });
+        
+        if (!hasRecommendations) {
+            recommendationsList.innerHTML = '<li>No specific recommendations at this time</li>';
+        }
+    }
+
+    async analyzeManualBlockedResources() {
+        const blockedResourcesText = document.getElementById('manual-blocked-resources').value.trim();
+        
+        if (!blockedResourcesText) {
+            this.showError('Please enter blocked resource URLs to analyze.');
+            return;
+        }
+        
+        try {
+            // Parse the blocked resources
+            const blockedUrls = blockedResourcesText
+                .split(/[,\n]/)
+                .map(url => url.trim())
+                .filter(url => url && this.isValidUrl(url));
+            
+            if (blockedUrls.length === 0) {
+                this.showError('No valid URLs found in the input.');
+                return;
+            }
+            
+            // Analyze each blocked resource
+            const analysis = [];
+            for (const url of blockedUrls) {
+                try {
+                    const urlObj = new URL(url);
+                    const hostname = urlObj.hostname;
+                    const pathname = urlObj.pathname;
+                    
+                    // Determine the type of resource based on URL
+                    let resourceType = 'script';
+                    if (pathname.includes('.css') || pathname.includes('/css/')) {
+                        resourceType = 'style';
+                    } else if (pathname.includes('.js') || pathname.includes('/js/')) {
+                        resourceType = 'script';
+                    } else if (pathname.includes('.png') || pathname.includes('.jpg') || pathname.includes('.gif') || pathname.includes('.svg')) {
+                        resourceType = 'image';
+                    } else if (pathname.includes('.woff') || pathname.includes('.ttf') || pathname.includes('.eot')) {
+                        resourceType = 'font';
+                    }
+                    
+                    // Create recommendation
+                    const directive = `${resourceType}-src`;
+                    const recommendation = `Add ${hostname} to ${directive} directive`;
+                    
+                    analysis.push({
+                        type: resourceType,
+                        url: url,
+                        directive: directive,
+                        recommendation: recommendation,
+                        hostname: hostname
+                    });
+                } catch (error) {
+                    console.warn(`Failed to analyze URL ${url}:`, error.message);
+                }
+            }
+            
+            // Display the analysis results
+            this.displayManualBlockedResourcesAnalysis(analysis);
+            
+        } catch (error) {
+            this.showError(`Error analyzing blocked resources: ${error.message}`);
+        }
+    }
+
+    displayManualBlockedResourcesAnalysis(analysis) {
+        // Update the blocked resources list with manual analysis
+        const blockedList = document.getElementById('blocked-list');
+        blockedList.innerHTML = '';
+        
+        if (analysis.length === 0) {
+            blockedList.innerHTML = '<li>No blocked resources to analyze</li>';
+            return;
+        }
+        
+        analysis.forEach(resource => {
+            const li = document.createElement('li');
+            li.innerHTML = `
+                <div class="blocked-resource-item">
+                    <span class="blocked-resource-type">${resource.type}</span>
+                    <div class="blocked-resource-url">${resource.url}</div>
+                    <div class="blocked-resource-recommendation">${resource.recommendation}</div>
+                </div>
+            `;
+            blockedList.appendChild(li);
+        });
+        
+        // Generate recommendations for updating CSP
+        this.generateRecommendationsFromBlockedResources(analysis);
+    }
+
+    generateRecommendationsFromBlockedResources(analysis) {
+        const recommendationsList = document.getElementById('recommendations-list');
+        recommendationsList.innerHTML = '';
+        
+        // Group by directive
+        const directiveGroups = {};
+        analysis.forEach(resource => {
+            if (!directiveGroups[resource.directive]) {
+                directiveGroups[resource.directive] = new Set();
+            }
+            directiveGroups[resource.directive].add(resource.hostname);
+        });
+        
+        // Generate recommendations
+        Object.entries(directiveGroups).forEach(([directive, hostnames]) => {
+            const hostnamesList = Array.from(hostnames);
+            const recommendation = `Update ${directive} to include: ${hostnamesList.map(h => `https://${h}`).join(' ')}`;
+            
+            const li = document.createElement('li');
+            li.className = 'recommendation-item';
+            li.textContent = recommendation;
+            recommendationsList.appendChild(li);
+        });
+        
+        // Add general recommendation
+        if (Object.keys(directiveGroups).length > 0) {
+            const generalLi = document.createElement('li');
+            generalLi.className = 'recommendation-item';
+            generalLi.textContent = 'These blocked resources indicate missing domains in your CSP configuration. Update your CDN CSP rules accordingly.';
+            recommendationsList.appendChild(generalLi);
+        }
     }
 
     generateConsolidatedCSP() {
