@@ -6,7 +6,7 @@ class CSPAuditor {
         this.totalUrls = 0;
         this.startTime = 0;
         		this.apiBase = '/api';
-		
+		this.isProcessing = false;
         this.initializeEventListeners();
     }
 
@@ -35,11 +35,15 @@ class CSPAuditor {
             manualInput.style.display = 'none';
             sitemapInput.classList.add('input-field');
             manualInput.classList.remove('input-field');
+            // Clear manual input to avoid reusing old values
+            manualInput.value = '';
         } else {
             sitemapInput.style.display = 'none';
             manualInput.style.display = 'block';
             sitemapInput.classList.remove('input-field');
             manualInput.classList.add('input-field');
+            // Clear sitemap input to avoid accidental sitemap processing
+            sitemapInput.value = '';
         }
         
         // Clear results when switching input type
@@ -53,6 +57,17 @@ class CSPAuditor {
         this.totalUrls = 0;
         this.startTime = 0;
         
+        // Reset progress UI
+        const fill = document.getElementById('progress-fill');
+        if (fill) fill.style.width = '0%';
+        const statusText = document.getElementById('status-text');
+        if (statusText) statusText.textContent = 'Initializing...';
+        const progressDetails = document.getElementById('progress-details');
+        if (progressDetails) progressDetails.textContent = 'Preparing...';
+        const completion = document.getElementById('completion-time');
+        if (completion) { completion.textContent = ''; completion.style.display = 'none'; }
+
+        // Hide sections initially
         document.getElementById('results-section').style.display = 'none';
         document.getElementById('progress-section').style.display = 'none';
         document.getElementById('error-message').style.display = 'none';
@@ -63,25 +78,45 @@ class CSPAuditor {
         document.getElementById('csv-download').disabled = true;
         document.getElementById('json-download').disabled = true;
         
-        // Clear comparison results
-        document.getElementById('comparison-results').classList.add('hidden');
+        // Clear content areas
+        const ds = document.getElementById('directive-stats'); if (ds) ds.innerHTML = '';
+        const bl = document.getElementById('blocked-list'); if (bl) bl.innerHTML = '';
+        const md = document.getElementById('missing-directives-analysis-list'); if (md) md.innerHTML = '';
+        const rl = document.getElementById('recommendations-list'); if (rl) rl.innerHTML = '';
+        const comp = document.getElementById('comparison-results'); if (comp) comp.classList.add('hidden');
+        const ruleText = document.getElementById('rule-text'); if (ruleText) ruleText.textContent = '';
+        
+        // Clear runtime summary
+        this.clearRuntimeSummary();
+    }
+
+    clearRuntimeSummary() {
+        const rds = document.getElementById('runtime-directive-stats'); if (rds) rds.innerHTML = '';
+        const rur = document.getElementById('runtime-updated-rule'); if (rur) rur.textContent = '';
+        const dlj = document.getElementById('download-runtime-json'); if (dlj) { dlj.classList.add('disabled'); dlj.disabled = true; dlj.removeAttribute('href'); }
+        const dle = document.getElementById('download-runtime-errors'); if (dle) { dle.classList.add('disabled'); dle.disabled = true; dle.removeAttribute('href'); }
+        const copyRun = document.getElementById('copy-runtime-rule-btn'); if (copyRun) { copyRun.textContent = '📋 Copy Updated Rule'; copyRun.classList.remove('copied'); }
     }
 
     async startProcessing() {
+        if (this.isProcessing) return;
+        const sitemapRadio = document.getElementById('sitemap-radio');
+        const isSitemap = sitemapRadio && sitemapRadio.checked;
         const sitemapUrl = document.getElementById('sitemap-url').value.trim();
         const manualUrls = document.getElementById('manual-urls').value.trim();
 
-        if (!sitemapUrl && !manualUrls) {
+        if ((isSitemap && !sitemapUrl) || (!isSitemap && !manualUrls)) {
             this.showError('Please provide either a sitemap URL or manual URLs.');
             return;
         }
 
+        this.isProcessing = true;
         try {
             this.clearResults();
             this.showProgress();
             this.startTime = Date.now();
 
-            if (sitemapUrl) {
+            if (isSitemap) {
                 await this.processSitemap(sitemapUrl);
             } else {
                 this.urls = this.parseManualUrls(manualUrls);
@@ -99,6 +134,8 @@ class CSPAuditor {
         } catch (error) {
             this.showError(`Error: ${error.message}`);
             this.hideProgress();
+        } finally {
+            this.isProcessing = false;
         }
     }
 
@@ -128,11 +165,10 @@ class CSPAuditor {
         }
     }
 
-
-
     parseManualUrls(urlsText) {
         return urlsText
-            .split(/[,\n]/)
+            .split(/[,
+]/)
             .map(url => url.trim())
             .filter(url => url && this.isValidUrl(url));
     }
@@ -203,13 +239,14 @@ class CSPAuditor {
         const remainingUrls = this.totalUrls - this.currentIndex;
         const estimatedTime = Math.round((avgTimePerUrl * remainingUrls) / 1000);
         
-        document.getElementById('status-text').textContent = `Processing URL ${this.currentIndex} of ${this.totalUrls}`;
+        // Show estimated time first
+        document.getElementById('status-text').textContent = `Estimated time remaining: ${estimatedTime} seconds`;
         
         // Show current URL being processed with count
         const currentUrl = this.urls[this.currentIndex - 1] || '';
         const shortUrl = currentUrl.length > 50 ? currentUrl.substring(0, 50) + '...' : currentUrl;
         document.getElementById('progress-details').textContent = 
-            `Current: ${shortUrl} (${this.currentIndex}/${this.totalUrls}) | Estimated time remaining: ${estimatedTime} seconds`;
+            `Processing: ${shortUrl} (${this.currentIndex}/${this.totalUrls})`;
     }
 
     displayResults() {
@@ -353,25 +390,55 @@ class CSPAuditor {
             missingDirectivesList.innerHTML = '<li>No missing directives detected</li>';
         }
         
-        // Display recommendations
+        // Display recommendations with accordion if more than 3
         const recommendationsList = document.getElementById('recommendations-list');
         recommendationsList.innerHTML = '';
         
-        let hasRecommendations = false;
+        const recs = [];
         this.results.forEach(result => {
             if (result.analysis && result.analysis.recommendations) {
                 result.analysis.recommendations.forEach(recommendation => {
-                    hasRecommendations = true;
-                    const li = document.createElement('li');
-                    li.className = 'recommendation-item';
-                    li.textContent = recommendation;
-                    recommendationsList.appendChild(li);
+                    recs.push(recommendation);
                 });
             }
         });
         
-        if (!hasRecommendations) {
+        if (recs.length === 0) {
             recommendationsList.innerHTML = '<li>No specific recommendations at this time</li>';
+            return;
+        }
+        
+        const maxVisible = 3;
+        const renderItems = (items) => {
+            recommendationsList.innerHTML = '';
+            items.forEach(recommendation => {
+                const li = document.createElement('li');
+                li.className = 'recommendation-item';
+                li.textContent = recommendation;
+                recommendationsList.appendChild(li);
+            });
+        };
+
+        if (recs.length > maxVisible) {
+            renderItems(recs.slice(0, maxVisible));
+            const toggle = document.createElement('button');
+            toggle.className = 'accordion-toggle';
+            toggle.textContent = `Show ${recs.length - maxVisible} more`;
+            let expanded = false;
+            toggle.onclick = () => {
+                expanded = !expanded;
+                if (expanded) {
+                    renderItems(recs);
+                    toggle.textContent = 'Show less';
+                } else {
+                    renderItems(recs.slice(0, maxVisible));
+                    toggle.textContent = `Show ${recs.length - maxVisible} more`;
+                }
+                recommendationsList.parentElement.appendChild(toggle);
+            };
+            recommendationsList.parentElement.appendChild(toggle);
+        } else {
+            renderItems(recs);
         }
     }
 
@@ -386,7 +453,8 @@ class CSPAuditor {
         try {
             // Parse the blocked resources
             const blockedUrls = blockedResourcesText
-                .split(/[,\n]/)
+                .split(/[,
+]/)
                 .map(url => url.trim())
                 .filter(url => url && this.isValidUrl(url));
             
@@ -571,7 +639,7 @@ class CSPAuditor {
                 result.csp || 'N/A',
                 result.error || 'N/A',
                 result.status || 'N/A'
-            ].map(field => `"${field.replace(/"/g, '""')}"`).join(',');
+            ].map(field => `"${String(field).replace(/"/g, '""')}"`).join(',');
             rows.push(row);
         });
         
@@ -769,13 +837,15 @@ class CSPAuditor {
             const manualUrls = document.getElementById('manual-urls').value.trim();
 
             let urls = [];
-            if (sitemapUrl) {
+            const sitemapRadio = document.getElementById('sitemap-radio');
+            const isSitemap = sitemapRadio && sitemapRadio.checked;
+            if (isSitemap && sitemapUrl) {
                 const sm = await fetch(`${this.apiBase}/fetch-sitemap`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sitemapUrl })
                 });
                 const data = await sm.json();
                 if (data.success) urls = data.urls;
-            } else if (manualUrls) {
+            } else if (!isSitemap && manualUrls) {
                 urls = this.parseManualUrls(manualUrls);
             }
             if (!urls || urls.length === 0) {
@@ -783,6 +853,8 @@ class CSPAuditor {
                 return;
             }
 
+            // Reset runtime section and progress
+            this.clearRuntimeSummary();
             this.showProgress();
             const resp = await fetch(`${this.apiBase}/extract-csp`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ urls })
@@ -813,11 +885,11 @@ class CSPAuditor {
                     if (!domains || domains.length === 0) return;
                     const item = document.createElement('div');
                     item.className = 'directive-item';
-                    const valuesHtml = domains.map(value => `<span class="directive-value">${value}</span>`).join('');
+                    const valuesHtml = domains.map(value => `<span class=\"directive-value\">${value}</span>`).join('');
                     item.innerHTML = `
-                        <div class="directive-name">${directive}</div>
-                        <div class="directive-count">${domains.length} domains</div>
-                        <div class="directive-values"><small>${valuesHtml}</small></div>
+                        <div class=\"directive-name\">${directive}</div>
+                        <div class=\"directive-count\">${domains.length} domains</div>
+                        <div class=\"directive-values\"><small>${valuesHtml}</small></div>
                     `;
                     container.appendChild(item);
                 });
@@ -855,6 +927,12 @@ class CSPAuditor {
 
     showProgress() {
         document.getElementById('progress-section').style.display = 'block';
+        const fill = document.getElementById('progress-fill');
+        if (fill) fill.style.width = '0%';
+        document.getElementById('status-text').textContent = 'Initializing...';
+        document.getElementById('progress-details').textContent = 'Preparing...';
+        const completion = document.getElementById('completion-time');
+        if (completion) { completion.textContent = ''; completion.style.display = 'none'; }
         document.getElementById('process-btn').disabled = true;
         document.getElementById('process-btn').querySelector('.spinner').classList.remove('hidden');
         document.getElementById('error-message').style.display = 'none';

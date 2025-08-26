@@ -317,6 +317,35 @@ body {
 
 .rule-actions .copy-btn {
     margin: 0;
+    background: #667eea;
+    color: #fff;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.2s ease;
+}
+
+.rule-actions .copy-btn.secondary {
+    background: #6c757d;
+}
+
+.rule-actions .copy-btn:hover {
+    background: #5468d4;
+}
+
+.copy-btn.copied {
+    background: #28a745 !important;
+}
+
+.accordion-toggle {
+    margin-top: 10px;
+    background: transparent;
+    border: 1px dashed #667eea;
+    color: #667eea;
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: pointer;
 }
 
 .directive-stats {
