@@ -17,8 +17,6 @@ class CSPAuditor {
         document.getElementById('copy-consolidated-btn').addEventListener('click', () => this.copyConsolidatedRule());
         document.getElementById('download-consolidated-btn').addEventListener('click', () => this.downloadConsolidatedRule());
         document.getElementById('analyze-blocked-btn').addEventListener('click', () => this.analyzeManualBlockedResources());
-        const runtimeBtn = document.getElementById('runtime-audit-btn');
-        if (runtimeBtn) runtimeBtn.addEventListener('click', () => this.runRuntimeAudit());
         // Radio button event listeners (do not clear results here; UX improvement)
         document.getElementById('sitemap-radio').addEventListener('change', () => this.switchInputType());
         document.getElementById('manual-radio').addEventListener('change', () => this.switchInputType());
