@@ -338,6 +338,18 @@ body {
     background: #28a745 !important;
 }
 
+.results-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 6px 0 12px 0;
+    color: #6c757d;
+}
+.run-time-message {
+    color: #2c3e50;
+    font-weight: 600;
+}
+
 .accordion-toggle {
     margin-top: 10px;
     background: transparent;
@@ -346,6 +358,7 @@ body {
     padding: 6px 10px;
     border-radius: 6px;
     cursor: pointer;
+    display: inline-block;
 }
 
 .directive-stats {
