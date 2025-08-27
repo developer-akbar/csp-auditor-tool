@@ -167,8 +167,7 @@ class CSPAuditor {
 
     parseManualUrls(urlsText) {
         return urlsText
-            .split(/[,
-]/)
+            .split(/[\,\n]+/)
             .map(url => url.trim())
             .filter(url => url && this.isValidUrl(url));
     }
@@ -453,8 +452,7 @@ class CSPAuditor {
         try {
             // Parse the blocked resources
             const blockedUrls = blockedResourcesText
-                .split(/[,
-]/)
+                .split(/[\,\n]+/)
                 .map(url => url.trim())
                 .filter(url => url && this.isValidUrl(url));
             
