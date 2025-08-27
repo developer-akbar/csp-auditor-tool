@@ -94,11 +94,24 @@ class CSPAuditor {
 
         this.isProcessing = true;
         try {
+            // Set context before clearing old results
+            const ctx = document.getElementById('results-context');
+            if (ctx) {
+                if (isSitemap) ctx.textContent = `Results: Sitemap Mode • ${sitemapUrl}`;
+                else {
+                    const urlsPreview = this.parseManualUrls(manualUrls).slice(0, 3);
+                    const moreCount = Math.max(0, this.parseManualUrls(manualUrls).length - urlsPreview.length);
+                    ctx.textContent = `Results: Manual URLs Mode • ${urlsPreview.join(', ')}${moreCount ? ` and ${moreCount} more` : ''}`;
+                }
+            }
+            const status = document.getElementById('results-status');
+            if (status) status.textContent = 'Processing new request... existing results will update when done.';
+
             // Clear results only when user starts a new action
             this.clearResults();
-            // Update context title for results
-            const ctx = document.getElementById('results-context');
-            if (ctx) ctx.textContent = isSitemap ? 'Results: Sitemap Mode' : 'Results: Manual URLs Mode';
+            // Keep context/status visible
+            if (ctx) ctx.style.display = 'inline';
+            if (status) status.style.display = 'inline';
 
             this.showProgress();
             this.startTime = Date.now();
@@ -118,9 +131,12 @@ class CSPAuditor {
             await this.processUrls();
             this.displayResults();
             this.hideProgress();
+            if (status) status.textContent = 'Completed.';
         } catch (error) {
             this.showError(`Error: ${error.message}`);
             this.hideProgress();
+            const status = document.getElementById('results-status');
+            if (status) status.textContent = 'Failed.';
         } finally {
             this.isProcessing = false;
         }
