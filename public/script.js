@@ -19,7 +19,7 @@ class CSPAuditor {
         document.getElementById('analyze-blocked-btn').addEventListener('click', () => this.analyzeManualBlockedResources());
         const runtimeBtn = document.getElementById('runtime-audit-btn');
         if (runtimeBtn) runtimeBtn.addEventListener('click', () => this.runRuntimeAudit());
-        // Radio button event listeners
+        // Radio button event listeners (do not clear results here; UX improvement)
         document.getElementById('sitemap-radio').addEventListener('change', () => this.switchInputType());
         document.getElementById('manual-radio').addEventListener('change', () => this.switchInputType());
     }
@@ -35,19 +35,15 @@ class CSPAuditor {
             manualInput.style.display = 'none';
             sitemapInput.classList.add('input-field');
             manualInput.classList.remove('input-field');
-            // Clear manual input to avoid reusing old values
+            // Leave existing results; just reset corresponding input
             manualInput.value = '';
         } else {
             sitemapInput.style.display = 'none';
             manualInput.style.display = 'block';
             sitemapInput.classList.remove('input-field');
             manualInput.classList.add('input-field');
-            // Clear sitemap input to avoid accidental sitemap processing
             sitemapInput.value = '';
         }
-        
-        // Clear results when switching input type
-        this.clearResults();
     }
 
     clearResults() {
@@ -67,26 +63,12 @@ class CSPAuditor {
         const completion = document.getElementById('completion-time');
         if (completion) { completion.textContent = ''; completion.style.display = 'none'; }
 
-        // Hide sections initially
-        document.getElementById('results-section').style.display = 'none';
+        // Hide progress initially but keep last results visible until new action starts
         document.getElementById('progress-section').style.display = 'none';
         document.getElementById('error-message').style.display = 'none';
         
-        // Disable download buttons
-        document.getElementById('csv-download').classList.add('disabled');
-        document.getElementById('json-download').classList.add('disabled');
-        document.getElementById('csv-download').disabled = true;
-        document.getElementById('json-download').disabled = true;
-        
-        // Clear content areas
-        const ds = document.getElementById('directive-stats'); if (ds) ds.innerHTML = '';
-        const bl = document.getElementById('blocked-list'); if (bl) bl.innerHTML = '';
-        const md = document.getElementById('missing-directives-analysis-list'); if (md) md.innerHTML = '';
-        const rl = document.getElementById('recommendations-list'); if (rl) rl.innerHTML = '';
+        // Clear runtime summary and comparison artifacts
         const comp = document.getElementById('comparison-results'); if (comp) comp.classList.add('hidden');
-        const ruleText = document.getElementById('rule-text'); if (ruleText) ruleText.textContent = '';
-        
-        // Clear runtime summary
         this.clearRuntimeSummary();
     }
 
@@ -112,7 +94,12 @@ class CSPAuditor {
 
         this.isProcessing = true;
         try {
+            // Clear results only when user starts a new action
             this.clearResults();
+            // Update context title for results
+            const ctx = document.getElementById('results-context');
+            if (ctx) ctx.textContent = isSitemap ? 'Results: Sitemap Mode' : 'Results: Manual URLs Mode';
+
             this.showProgress();
             this.startTime = Date.now();
 
@@ -334,6 +321,10 @@ class CSPAuditor {
     }
 
     displayCSPAnalysis() {
+        // Clean recommendation container and remove any previous accordion toggle
+        const recommendationsList = document.getElementById('recommendations-list');
+        const prevToggle = recommendationsList && recommendationsList.parentElement ? recommendationsList.parentElement.querySelector('.accordion-toggle') : null;
+        if (prevToggle) prevToggle.remove();
         // Display blocked resources
         const blockedList = document.getElementById('blocked-list');
         blockedList.innerHTML = '';
@@ -389,9 +380,8 @@ class CSPAuditor {
             missingDirectivesList.innerHTML = '<li>No missing directives detected</li>';
         }
         
-        // Display recommendations with accordion if more than 3
-        const recommendationsList = document.getElementById('recommendations-list');
-        recommendationsList.innerHTML = '';
+        // Recommendations with accordion if more than 3
+        if (recommendationsList) recommendationsList.innerHTML = '';
         
         const recs = [];
         this.results.forEach(result => {
@@ -403,13 +393,13 @@ class CSPAuditor {
         });
         
         if (recs.length === 0) {
-            recommendationsList.innerHTML = '<li>No specific recommendations at this time</li>';
+            if (recommendationsList) recommendationsList.innerHTML = '<li>No specific recommendations at this time</li>';
             return;
         }
         
         const maxVisible = 3;
         const renderItems = (items) => {
-            recommendationsList.innerHTML = '';
+            if (recommendationsList) recommendationsList.innerHTML = '';
             items.forEach(recommendation => {
                 const li = document.createElement('li');
                 li.className = 'recommendation-item';
@@ -950,6 +940,10 @@ class CSPAuditor {
         
         document.getElementById('completion-time').textContent = timeDisplay;
         document.getElementById('completion-time').style.display = 'block';
+        
+        // Also update results header run time message for persistence
+        const runMsg = document.getElementById('run-time-message');
+        if (runMsg) runMsg.textContent = timeDisplay;
         
         // Hide progress after a short delay to show completion time
         setTimeout(() => {
