@@ -350,6 +350,10 @@ body {
     font-weight: 600;
 }
 
+.results-status {
+    color: #6c757d;
+}
+
 .accordion-toggle {
     margin-top: 10px;
     background: transparent;
